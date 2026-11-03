@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Videos">
+<meta name="theme-color" content="#4f46e5">
+<title>My Video Browser</title>
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+<div id="login" class="login hide">
+  <form id="loginForm" autocomplete="on">
+    <div class="logo" style="width:44px;height:44px;border-radius:12px;font-size:20px">&#9654;</div>
+    <h1>My Video Browser</h1>
+    <p>Private. Enter your password.</p>
+    <input id="pw" type="password" name="password" autocomplete="current-password" placeholder="Password" required>
+    <div class="err" id="loginErr"></div>
+    <button class="btn" type="submit" id="loginBtn">Sign in</button>
+    <a href="check/" style="font-size:14px;text-align:center">Playback check</a>
+  </form>
+</div>
+
+<div id="app" class="hide">
+  <header class="top">
+    <div class="bar">
+      <a class="brand" href="./" aria-label="Home"><span class="logo">&#9654;</span><span class="word">Videos</span></a>
+      <form class="search" id="searchForm" role="search">
+        <input id="q" type="search" placeholder="Search videos" autocomplete="off" enterkeyhint="search" aria-label="Search">
+        <button class="btn" type="submit">Search</button>
+      </form>
+    </div>
+  </header>
+  <main>
+    <section class="player" id="player">
+      <div class="frame" id="frame"></div>
+      <div class="ptitle" id="ptitle"></div>
+      <div class="pmeta"><span id="pmeta"></span><span class="status" id="pstatus">Loading player&hellip;</span></div>
+    </section>
+    <div id="notice"></div>
+    <div id="results" class="grid"></div>
+    <div class="empty" id="empty">
+      <h2>Search for something</h2>
+      <div>Results play right here on this page.</div>
+    </div>
+    <div class="more hide" id="more"><button class="btn ghost" id="moreBtn">Load more</button></div>
+    <div class="foot"><a href="check/">Playback check</a> &middot; <a href="#" id="signout">Sign out</a> &middot; test build 1</div>
+  </main>
+</div>
+
+<script src="common.js?v=1"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var M = window.MVB, E = M.esc;
+  var state = { q: "", next: null, items: [], player: null, current: null, loading: false };
+
+  function show(view) { $("login").classList.toggle("hide", view !== "login"); $("app").classList.toggle("hide", view !== "app"); if (view === "login") setTimeout(function () { $("pw").focus(); }, 50); }
+
+  $("loginForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    $("loginErr").textContent = ""; $("loginBtn").disabled = true; $("loginBtn").textContent = "Signing in...";
+    M.call("/login", { method: "POST", body: { password: $("pw").value } }).then(function (j) {
+      M.setToken(j.token); $("pw").value = ""; show("app"); $("q").focus();
+    }, function (err) { $("loginErr").textContent = err.message; }).then(function () { $("loginBtn").disabled = false; $("loginBtn").textContent = "Sign in"; });
+  });
+  $("signout").addEventListener("click", function (e) { e.preventDefault(); M.setToken(""); if (state.player) state.player.destroy(); location.hash = ""; show("login"); });
+
+  function notice(kind, html) { $("notice").innerHTML = html ? '<div class="note ' + kind + '">' + html + "</div>" : ""; }
+
+  function card(v) {
+    var meta = [E(v.channelTitle), M.views(v.views), M.ago(v.publishedAt)].filter(Boolean).join(" &middot; ");
+    var badge = v.live === "live" ? "LIVE" : M.dur(v.seconds);
+    return '<button class="card" data-id="' + E(v.id) + '"><div class="thumb"><img loading="lazy" alt="" src="' + E(v.thumb) + '" onerror="this.parentNode.classList.add(\'noimg\')">' +
+      (badge ? '<span class="badge">' + badge + "</span>" : "") + '</div><div class="info"><div class="t">' + E(v.title) + '</div><div class="m">' + meta + "</div></div></button>";
+  }
+  function skeleton(n) { var s = ""; for (var i = 0; i < n; i++) s += '<div class="card skel"><div class="thumb"></div><div class="info"><div class="t">Loading title here</div><div class="m">channel</div></div></div>'; return s; }
+
+  function search(q, more) {
+    if (state.loading) return;
+    state.loading = true;
+    if (!more) { state.q = q; state.items = []; state.next = null; $("results").innerHTML = skeleton(6); $("empty").classList.add("hide"); notice(); }
+    $("moreBtn").textContent = "Loading...";
+    M.call("/search?q=" + encodeURIComponent(state.q) + (more && state.next ? "&pageToken=" + encodeURIComponent(state.next) : "")).then(function (j) {
+      state.next = j.nextPageToken;
+      state.items = state.items.concat(j.items);
+      var html = j.items.map(card).join("");
+      if (more) $("results").insertAdjacentHTML("beforeend", html); else $("results").innerHTML = html;
+      if (!state.items.length) { $("results").innerHTML = ""; notice("", "No playable videos found for &ldquo;" + E(state.q) + "&rdquo;. Try other words."); }
+      $("more").classList.toggle("hide", !state.next);
+      checkThumbs();
+    }, function (err) {
+      if (!more) $("results").innerHTML = "";
+      if (err.kind === "auth") { M.setToken(""); show("login"); return; }
+      var what = err.kind === "network" ? "Search server not reachable" : err.kind === "api" ? "YouTube search failed (API problem, not the filter)" : "Search failed";
+      notice("bad", "<b>" + what + ".</b> " + E(err.message) + ' <a href="check/">Run the playback check</a>');
+    }).then(function () { state.loading = false; $("moreBtn").textContent = "Load more"; });
+  }
+
+  function checkThumbs() {
+    // If thumbnails don't load at all, i.ytimg.com is probably filtered.
+    setTimeout(function () {
+      var imgs = [].slice.call(document.querySelectorAll(".thumb img"));
+      if (imgs.length < 3) return;
+      var broken = imgs.filter(function (i) { return i.complete && i.naturalWidth === 0; }).length;
+      if (broken === imgs.length) notice("warn", "Thumbnails are not loading. The filter may be blocking <b>i.ytimg.com</b> (YouTube's image server). Search itself worked.");
+    }, 6000);
+  }
+
+  $("searchForm").addEventListener("submit", function (e) { e.preventDefault(); var q = $("q").value.trim(); if (!q) return; $("q").blur(); search(q, false); });
+  $("moreBtn").addEventListener("click", function () { search(state.q, true); });
+  $("results").addEventListener("click", function (e) {
+    var c = e.target.closest(".card"); if (!c || c.classList.contains("skel")) return;
+    var v = state.items.filter(function (x) { return x.id === c.dataset.id; })[0]; if (v) play(v);
+  });
+
+  function setStatus(kind, text) { var s = $("pstatus"); s.className = "status " + (kind || ""); s.textContent = text; }
+  function overlay(title, text) { var d = document.createElement("div"); d.className = "msg"; d.innerHTML = "<b>" + E(title) + "</b><p>" + text + "</p>"; $("frame").appendChild(d); }
+
+  function play(v) {
+    state.current = v;
+    [].forEach.call(document.querySelectorAll(".card.now"), function (c) { c.classList.remove("now"); });
+    var c = document.querySelector('.card[data-id="' + v.id + '"]'); if (c) c.classList.add("now");
+    $("player").classList.add("on");
+    $("ptitle").textContent = v.title;
+    $("pmeta").innerHTML = [E(v.channelTitle), M.views(v.views), M.ago(v.publishedAt)].filter(Boolean).join(" &middot; ");
+    setStatus("", "Loading player...");
+    if (state.player) state.player.destroy();
+    state.player = M.embed($("frame"), v.id, function (ev, st, info) {
+      if (state.current !== v) return;
+      if (ev === "loaded" || ev === "ready") setStatus("", "Ready. Tap play");
+      if (ev === "state") { if (st.state === 1) setStatus("ok", "Playing"); else if (st.state === 2) setStatus("", "Paused"); else if (st.state === 3) setStatus("", "Buffering..."); else if (st.state === 0) setStatus("", "Ended"); }
+      if (ev === "error") { setStatus(info.kind === "embed" ? "warn" : "bad", info.kind === "embed" ? "Not embeddable" : "Player error"); overlay(info.kind === "embed" ? "Can't play on other sites" : "Can't play this video", E(info.text)); }
+      if (ev === "timeout") { setStatus("bad", "Player didn't load"); overlay("The video player didn't load", "Search works, but the YouTube player never answered. Most likely the filter is blocking <b>youtube.com/embed</b> on this device. <a style=\"color:#c7c4ff\" href=\"check/\">Open the playback check</a>"); }
+    }, { autoplay: true });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  show(M.token() ? "app" : "login");
+})();
+</script>
+</body>
+</html>
