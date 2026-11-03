@@ -62,3 +62,4 @@ table.dom td{border-top:1px solid var(--line);padding:9px 6px;vertical-align:top
 table.dom td:first-child{font-family:ui-monospace,Menlo,monospace;font-size:13.5px;white-space:nowrap}
 .copybox{width:100%;min-height:150px;font:13px/1.45 ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--bg);color:var(--text)}
 dl.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:8px 0 0;font-size:14.5px}dl.kv dt{color:var(--muted)}dl.kv dd{margin:0}
+.filterline{display:flex;justify-content:flex-end;margin:-4px 0 12px}
