@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Videos">
 <meta name="theme-color" content="#4f46e5">
 <title>My Video Browser</title>
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 <div id="login" class="login hide">
@@ -40,6 +40,7 @@
       <div class="ptitle" id="ptitle"></div>
       <div class="pmeta"><span id="pmeta"></span><span class="status" id="pstatus">Loading player&hellip;</span></div>
     </section>
+    <div class="filterline"><span class="status ok" title="Every search uses YouTube strict safe search plus our own filter">&#128737; Safe search: strict</span></div>
     <div id="notice"></div>
     <div id="results" class="grid"></div>
     <div class="empty" id="empty">
@@ -51,7 +52,7 @@
   </main>
 </div>
 
-<script src="common.js?v=1"></script>
+<script src="common.js?v=2"></script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -89,7 +90,8 @@
       state.items = state.items.concat(j.items);
       var html = j.items.map(card).join("");
       if (more) $("results").insertAdjacentHTML("beforeend", html); else $("results").innerHTML = html;
-      if (!state.items.length) { $("results").innerHTML = ""; notice("", "No playable videos found for &ldquo;" + E(state.q) + "&rdquo;. Try other words."); }
+      if (j.blocked) { $("results").innerHTML = ""; notice("warn", "That search is blocked by the content filter."); }
+      else if (!state.items.length) { $("results").innerHTML = ""; notice("", "No playable videos found for &ldquo;" + E(state.q) + "&rdquo;. Try other words."); }
       $("more").classList.toggle("hide", !state.next);
       checkThumbs();
     }, function (err) {
@@ -120,6 +122,13 @@
   function setStatus(kind, text) { var s = $("pstatus"); s.className = "status " + (kind || ""); s.textContent = text; }
   function overlay(title, text) { var d = document.createElement("div"); d.className = "msg"; d.innerHTML = "<b>" + E(title) + "</b><p>" + text + "</p>"; $("frame").appendChild(d); }
 
+  function endCover(v) {
+    // Cover YouTube's end screen so it doesn't lead to other videos.
+    var d = document.createElement("div"); d.className = "msg"; d.innerHTML = '<b>Video ended</b><p><button class="btn small" type="button">Watch again</button></p>';
+    d.querySelector("button").addEventListener("click", function () { play(v); });
+    $("frame").appendChild(d);
+  }
+
   function play(v) {
     state.current = v;
     [].forEach.call(document.querySelectorAll(".card.now"), function (c) { c.classList.remove("now"); });
@@ -132,7 +141,7 @@
     state.player = M.embed($("frame"), v.id, function (ev, st, info) {
       if (state.current !== v) return;
       if (ev === "loaded" || ev === "ready") setStatus("", "Ready. Tap play");
-      if (ev === "state") { if (st.state === 1) setStatus("ok", "Playing"); else if (st.state === 2) setStatus("", "Paused"); else if (st.state === 3) setStatus("", "Buffering..."); else if (st.state === 0) setStatus("", "Ended"); }
+      if (ev === "state") { if (st.state === 1) setStatus("ok", "Playing"); else if (st.state === 2) setStatus("", "Paused"); else if (st.state === 3) setStatus("", "Buffering..."); else if (st.state === 0) { setStatus("", "Ended"); endCover(v); } }
       if (ev === "error") { setStatus(info.kind === "embed" ? "warn" : "bad", info.kind === "embed" ? "Not embeddable" : "Player error"); overlay(info.kind === "embed" ? "Can't play on other sites" : "Can't play this video", E(info.text)); }
       if (ev === "timeout") { setStatus("bad", "Player didn't load"); overlay("The video player didn't load", "Search works, but the YouTube player never answered. Most likely the filter is blocking <b>youtube.com/embed</b> on this device. <a style=\"color:#c7c4ff\" href=\"check/\">Open the playback check</a>"); }
     }, { autoplay: true });
