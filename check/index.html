@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Playback check - My Video Browser</title>
+<link rel="stylesheet" href="../style.css?v=1">
+</head>
+<body>
+<header class="top"><div class="bar">
+  <a class="brand" href="../"><span class="logo">&#9654;</span><span>Playback check</span></a>
+  <div style="flex:1"></div>
+  <button class="btn small" id="rerun">Run again</button>
+</div></header>
+<main>
+  <div class="note" id="summary">Running checks&hellip;</div>
+  <div class="steps">
+
+    <div class="step">
+      <h3>1. Embedded test video <span class="status" id="s1">Loading&hellip;</span></h3>
+      <p>A known video that allows embedding, played with the official YouTube player. Tap play to confirm the video itself streams.</p>
+      <div class="frame" id="f1"></div>
+      <p id="d1"></p>
+    </div>
+
+    <div class="step">
+      <h3>2. YouTube search (API) <span class="status" id="s2">Waiting&hellip;</span></h3>
+      <p id="d2">Checks that our server can search YouTube with the official Data API.</p>
+      <form id="pwForm" class="hide" style="display:flex;gap:8px;margin-top:8px"><input id="pw" type="password" placeholder="Password" style="flex:1;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);padding:0 12px;font-size:16px"><button class="btn small">Sign in</button></form>
+    </div>
+
+    <div class="step">
+      <h3>3. Thumbnails <span class="status" id="s3">Loading&hellip;</span></h3>
+      <p id="d3">Loads a picture from YouTube's image server (i.ytimg.com).</p>
+      <img id="img3" alt="" style="width:160px;border-radius:10px;margin-top:6px;display:block;background:var(--line);aspect-ratio:16/9;object-fit:cover">
+    </div>
+
+    <div class="step">
+      <h3>4. What the results mean</h3>
+      <p><b>API failure</b> (step 2 red): search itself failed. The message says why (key problem, daily limit used up, or our server unreachable). Videos can still embed; this is not the filter.</p>
+      <p><b>Not embeddable</b> (player shows &ldquo;owner does not allow&rdquo;): the player loaded fine, but that one video's owner turned off embedding. Pick another video. Not the filter.</p>
+      <p><b>Likely filter block</b> (step 1 &ldquo;Player didn't load&rdquo;): the YouTube player never answered at all within 15 seconds, or it loads but the video never starts after tapping play. On a filtered device that almost always means the filter is blocking one of the domains below. Ask GenTech to allow embedded YouTube for this site.</p>
+    </div>
+
+    <div class="step">
+      <h3>5. Domains this app uses (for GenTech)</h3>
+      <table class="dom" id="domTable"></table>
+      <p style="margin-top:12px">Copy and send to GenTech support:</p>
+      <textarea class="copybox" id="copy" readonly></textarea>
+      <button class="btn small" id="copyBtn" style="margin-top:8px">Copy</button>
+    </div>
+
+    <div class="step">
+      <h3>Device</h3>
+      <dl class="kv" id="dev"></dl>
+    </div>
+  </div>
+  <div class="foot"><a href="../">Back to videos</a></div>
+</main>
+<script src="../common.js?v=1"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var M = window.MVB, E = M.esc;
+  var TEST = "M7lc1UVf-VE";
+  var res = { embed: null, api: null, img: null, played: false };
+  var host = location.host;
+  var DOMAINS = [
+    [host, "This website (the page itself)", true],
+    [new URL(M.API).host, "Our private search server (password-protected)", true],
+    ["www.youtube.com", "The official embedded player (youtube.com/embed/...) and its scripts", true],
+    ["*.googlevideo.com", "The actual video stream the embedded player plays", true],
+    ["i.ytimg.com", "Video thumbnails", true],
+    ["s.ytimg.com, yt3.ggpht.com", "Player images, channel pictures", false],
+    ["www.gstatic.com, fonts.gstatic.com", "Google static files and fonts used by the player", false],
+    ["www.google.com, jnn-pa.googleapis.com, play.google.com", "Player checks and logging (the player may stall without them)", false],
+    ["googleads.g.doubleclick.net, static.doubleclick.net", "Ads inside some embedded videos (optional)", false]
+  ];
+  function setS(id, kind, text) { var s = $(id); s.className = "status " + (kind || ""); s.textContent = text; }
+
+  function renderDomains() {
+    $("domTable").innerHTML = DOMAINS.map(function (d) { return "<tr><td>" + E(d[0]) + "</td><td>" + E(d[1]) + (d[2] ? " <b>(needed)</b>" : "") + "</td></tr>"; }).join("");
+    $("copy").value = "Hi GenTech, please allow embedded YouTube playback for my private video site.\n\nSite: https://" + host + location.pathname.replace(/check\/?$/, "") + "\n\nNeeded domains:\n" +
+      DOMAINS.filter(function (d) { return d[2]; }).map(function (d) { return "- " + d[0] + "  (" + d[1] + ")"; }).join("\n") +
+      "\n\nHelpful (player may stall without them):\n" + DOMAINS.filter(function (d) { return !d[2]; }).map(function (d) { return "- " + d[0]; }).join("\n") +
+      "\n\nIt only uses the official YouTube embed player (youtube.com/embed) and the official YouTube Data API. Videos are not downloaded or proxied.";
+  }
+  $("copyBtn").addEventListener("click", function () { var t = $("copy"); t.select(); t.setSelectionRange(0, 99999); try { navigator.clipboard.writeText(t.value); } catch (e) { document.execCommand("copy"); } $("copyBtn").textContent = "Copied"; });
+
+  function summary() {
+    var parts = [];
+    if (res.embed === "ok") parts.push(res.played ? "<b>Embedded playback works</b> on this device." : "<b>The YouTube player loads</b> on this device. Tap play on the test video to confirm the video streams.");
+    if (res.embed === "timeout") parts.push("<b>The YouTube player did not load.</b> Most likely the filter blocks youtube.com/embed. See the domain list below.");
+    if (res.embed === "stall") parts.push("<b>The player loads but the video doesn't start.</b> The filter may block the video stream (googlevideo.com).");
+    if (res.embed === "error") parts.push("<b>The player loaded but reported an error</b> for the test video (see step 1).");
+    if (res.api === "ok") parts.push("Search works.");
+    if (res.api === "fail") parts.push("Search failed (see step 2); this is an API/server problem, not the filter.");
+    if (res.api === "net") parts.push("Our search server could not be reached; the filter may block " + E(new URL(M.API).host) + ".");
+    if (res.api === "signin") parts.push("Sign in at step 2 to test search.");
+    if (res.img === "fail") parts.push("Thumbnails are blocked (i.ytimg.com).");
+    var bad = res.embed === "timeout" || res.embed === "stall" || res.api === "fail" || res.api === "net" || res.img === "fail";
+    var good = res.embed === "ok" && res.api === "ok" && res.img === "ok";
+    $("summary").className = "note " + (bad ? "bad" : good ? "" : "warn");
+    $("summary").innerHTML = parts.join(" ") || "Running checks&hellip;";
+  }
+
+  var player = null, stallTimer = null;
+  function testEmbed() {
+    setS("s1", "", "Loading..."); $("d1").textContent = ""; res.embed = null; res.played = false;
+    if (player) player.destroy();
+    var t0 = Date.now();
+    player = M.embed($("f1"), TEST, function (ev, st, info) {
+      if (ev === "loaded") { res.embed = "ok"; setS("s1", "ok", "Player loaded"); $("d1").textContent = "The official player answered in " + ((Date.now() - t0) / 1000).toFixed(1) + " s. Now tap play."; }
+      if (ev === "state" && st.state === 3 && !res.played) { clearTimeout(stallTimer); stallTimer = setTimeout(function () { if (!res.played) { res.embed = "stall"; setS("s1", "bad", "Video not starting"); $("d1").textContent = "The player loaded but the video has been buffering for 20 s. The filter may be blocking the video stream (googlevideo.com)."; summary(); } }, 20000); }
+      if (ev === "progress" && !res.played) { clearTimeout(stallTimer); res.played = true; res.embed = "ok"; setS("s1", "ok", "Playing"); $("d1").textContent = "The video is streaming. Embedded playback works on this device."; }
+      if (ev === "error") { res.embed = info.kind === "embed" ? "error" : "error"; setS("s1", info.kind === "embed" ? "warn" : "bad", "Player error " + st.error); $("d1").textContent = info.text; }
+      if (ev === "timeout") { res.embed = "timeout"; setS("s1", "bad", "Player didn't load"); $("d1").innerHTML = "The YouTube player didn't answer within 15 seconds. <b>Likely a filter block</b> of youtube.com/embed (or no internet)."; }
+      summary();
+    });
+  }
+
+  function testApi() {
+    if (!M.token()) { res.api = "signin"; setS("s2", "warn", "Sign in to test"); $("pwForm").classList.remove("hide"); summary(); return; }
+    $("pwForm").classList.add("hide"); setS("s2", "", "Testing..."); $("d2").textContent = "Asking our server to search YouTube...";
+    M.call("/diag", { timeout: 25000 }).then(function (j) {
+      if (j.search && j.search.ok && j.videos && j.videos.ok) {
+        res.api = "ok"; setS("s2", "ok", "Search works");
+        $("d2").innerHTML = "API key set up, test search returned " + j.search.results + " videos" + (j.search.cached ? " (from cache)" : "") + ". Test video: &ldquo;" + E(j.videos.title) + "&rdquo;, embeddable: " + (j.videos.embeddable ? "yes" : "no") + ".";
+      } else {
+        res.api = "fail"; setS("s2", "bad", "API failed");
+        var e = (j.search && !j.search.ok ? j.search : j.videos) || {};
+        $("d2").innerHTML = "<b>YouTube API problem:</b> " + E(e.message || "unknown") + (e.reason ? " (" + E(e.reason) + ")" : "") + (j.keyConfigured ? "" : " The API key isn't configured yet.");
+      }
+    }, function (err) {
+      if (err.kind === "auth") { M.setToken(""); return testApi(); }
+      res.api = err.kind === "network" ? "net" : "fail"; setS("s2", "bad", err.kind === "network" ? "Server unreachable" : "API failed"); $("d2").textContent = err.message;
+    }).then(summary);
+  }
+  $("pwForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    M.call("/login", { method: "POST", body: { password: $("pw").value } }).then(function (j) { M.setToken(j.token); $("pw").value = ""; testApi(); }, function (err) { $("d2").textContent = err.message; });
+  });
+
+  function testImg() {
+    res.img = null; setS("s3", "", "Loading...");
+    var img = $("img3"), done = false;
+    img.onload = function () { done = true; res.img = "ok"; setS("s3", "ok", "Loads"); $("d3").textContent = "i.ytimg.com loads."; summary(); };
+    img.onerror = function () { done = true; res.img = "fail"; setS("s3", "bad", "Blocked"); $("d3").innerHTML = "The thumbnail did not load. The filter may block <b>i.ytimg.com</b>."; summary(); };
+    img.src = "https://i.ytimg.com/vi/" + TEST + "/mqdefault.jpg?t=" + Date.now();
+    setTimeout(function () { if (!done) img.onerror(); }, 12000);
+  }
+
+  function device() {
+    var ua = navigator.userAgent;
+    var rows = [["Page", location.href], ["Screen", screen.width + " x " + screen.height + " (window " + innerWidth + " x " + innerHeight + ")"], ["Browser", ua], ["Signed in", M.token() ? "yes" : "no"], ["Time", new Date().toString()]];
+    $("dev").innerHTML = rows.map(function (r) { return "<dt>" + E(r[0]) + "</dt><dd>" + E(r[1]) + "</dd>"; }).join("");
+  }
+
+  function runAll() { renderDomains(); device(); testEmbed(); testApi(); testImg(); }
+  $("rerun").addEventListener("click", runAll);
+  runAll();
+})();
+</script>
+</body>
+</html>
