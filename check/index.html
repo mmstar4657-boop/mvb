@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Playback check - My Video Browser</title>
-<link rel="stylesheet" href="../style.css?v=1">
+<link rel="stylesheet" href="../style.css?v=2">
 </head>
 <body>
 <header class="top"><div class="bar">
@@ -45,7 +45,18 @@
     </div>
 
     <div class="step">
-      <h3>5. Domains this app uses (for GenTech)</h3>
+      <h3>5. Content filter <span class="status ok">Safe search: strict</span></h3>
+      <p>Built into the server, so the page can't turn it off:</p>
+      <p>&bull; Every search uses YouTube's <b>strict</b> safe search.<br>
+      &bull; Each result is then re-checked: age-restricted, private/unlisted and non-embeddable videos are removed.<br>
+      &bull; A blocked-words list (explicit and harmful terms) is checked against the search itself and each video's title, description, tags and channel name. A blocked-channels list can be added to.<br>
+      &bull; The player uses <code>rel=0</code>, so suggestions inside the player stay on the same channel, and the end screen is covered when a video finishes.</p>
+      <p>YouTube's embedded player has no setting to force Restricted Mode, so the filtering above is the protection, on top of GenTech's own filtering.</p>
+      <p id="filt"></p>
+    </div>
+
+    <div class="step">
+      <h3>6. Domains this app uses (for GenTech)</h3>
       <table class="dom" id="domTable"></table>
       <p style="margin-top:12px">Copy and send to GenTech support:</p>
       <textarea class="copybox" id="copy" readonly></textarea>
@@ -59,7 +70,7 @@
   </div>
   <div class="foot"><a href="../">Back to videos</a></div>
 </main>
-<script src="../common.js?v=1"></script>
+<script src="../common.js?v=2"></script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -127,6 +138,7 @@
     M.call("/diag", { timeout: 25000 }).then(function (j) {
       if (j.search && j.search.ok && j.videos && j.videos.ok) {
         res.api = "ok"; setS("s2", "ok", "Search works");
+        if (j.filter) $("filt").textContent = "Server reports: safe search " + j.filter.safeSearch + ", " + j.filter.blockedWords + " blocked words, " + j.filter.blockedChannels + " blocked channels.";
         $("d2").innerHTML = "API key set up, test search returned " + j.search.results + " videos" + (j.search.cached ? " (from cache)" : "") + ". Test video: &ldquo;" + E(j.videos.title) + "&rdquo;, embeddable: " + (j.videos.embeddable ? "yes" : "no") + ".";
       } else {
         res.api = "fail"; setS("s2", "bad", "API failed");
